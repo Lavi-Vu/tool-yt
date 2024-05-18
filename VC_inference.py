@@ -62,8 +62,6 @@ def remove_empty_lines(text):
     return cleaned_text
 
 def create_tts_fn(model_dir, hps, speaker_ids):
-    del model  # Release model after inference
-    torch.cuda.empty_cache()  # Clear GPU memory
     def tts_fn(text, speaker, language, speed):
         with no_grad():
             model = SynthesizerTrn(
@@ -92,7 +90,8 @@ def create_tts_fn(model_dir, hps, speaker_ids):
                     audio = np.concatenate((audio, audio_from_text))
                     del stn_tst, x_tst, x_tst_lengths, sid, audio_from_text  # Release temporary variables
             
-            
+            del model  # Release model after inference
+            torch.cuda.empty_cache()  # Clear GPU memory
         
         return "Success", (hps.data.sampling_rate, audio)
 

@@ -1,2 +1,10 @@
 OUTPUT_MODEL/D_latest.pth
 OUTPUT_MODEL/G_latest.pth
+*.mp3
+*.wav
+*.mp4
+*.zip
+.vscode
+.virtual_documents
+.ipynb_checkpoints
+__pycache__
