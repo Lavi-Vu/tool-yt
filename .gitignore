@@ -4,7 +4,16 @@ OUTPUT_MODEL/G_latest.pth
 *.wav
 *.mp4
 *.zip
+*.srt
 .vscode
 .virtual_documents
 .ipynb_checkpoints
 __pycache__
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+.ipynb_checkpoints/
+.virtual_documents
