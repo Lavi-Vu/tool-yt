@@ -28,3 +28,5 @@ sounddevice
 soundfile
 pyqt5
 python-docx
+yt_dlp
+pysrt

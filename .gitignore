@@ -15,5 +15,7 @@ __pycache__
 !.vscode/launch.json
 !.vscode/extensions.json
 !.vscode/*.code-snippets
-.ipynb_checkpoints/
-.virtual_documents
+.ipynb_checkpoints/*
+.virtual_documents/*
+*.ass
+*.7z

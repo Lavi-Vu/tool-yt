@@ -31,9 +31,11 @@ logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 language_marks = {
     "Japanese": "[JA]",
+    "Korea": "[KO]",
+
 }
-lang = ['Japanese']
-# lang = ['Korea']
+# lang = ['Japanese', 'Korea']
+lang = ['Korea']
 
 # def split_text_by_length_or_character(text):
 #     max_chunk_length = 40
@@ -156,14 +158,12 @@ def create_tts_fn(model_dir, hps, speaker_ids):
                         else:
                             # If no space is found, just insert newline at position 30
                             sub = sub[:30] + '\n' + sub[30:]
-                    
-                    chunk = language_marks[language] + chunk + language_marks[language]
                     stn_tst = get_text(chunk, hps, False)
                     x_tst = stn_tst.unsqueeze(0).to(device)
                     x_tst_lengths = LongTensor([stn_tst.size(0)]).to(device)
                     sid = LongTensor([speaker_id]).to(device)
                     
-                    audio_from_text = model.infer(x_tst, x_tst_lengths, sid=sid, noise_scale=.667, noise_scale_w=0.8,
+                    audio_from_text = model.infer(x_tst, x_tst_lengths, sid=sid, noise_scale=.667, noise_scale_w=0.6,
                                                   length_scale=0.8 / speed)[0][0, 0].data.cpu().float().numpy()
                     
                     start_time = current_time
@@ -252,6 +252,7 @@ def transcribe_audio(youtube_url, model_type, language):
     else:
         return "Audio download failed"
 
+
 def add_audio_and_subtitles_to_video(input_video_path, subtitle_file_path, audio_file_path, output_video_path):
     subs = pysrt.open(subtitle_file_path)
     last_sub_end_time = subs[-1].end.to_time() if subs else timedelta(seconds=0)
@@ -318,7 +319,7 @@ if __name__ == "__main__":
                 with gr.Column():
                     textbox = gr.TextArea(label="Text",
                                           placeholder="Type your sentence here",
-                                          value="こんにちわ。", elem_id="tts-input")
+                                            elem_id="tts-input")
                     char_dropdown = gr.Dropdown(choices=speaker_ids.keys(), value=list(speaker_ids.keys())[0], label='character')
                     # char_dropdown = gr.Dropdown(choices=speaker_ids, value=speaker_ids[0], label='character')
                     language_dropdown = gr.Dropdown(choices=lang, value=lang[0], label='language')
@@ -374,5 +375,5 @@ if __name__ == "__main__":
         #         inputs=[video_input, text_input, model_options, char_dropdown, language_dropdown, duration_slider], 
         #         outputs=[video_output, transcript_output, audio_output]
         #     )   
-    webbrowser.open("http://127.0.0.1:7861")
-    demo.launch(server_port=7861)
+    webbrowser.open("http://127.0.0.1:7860")
+    demo.launch(server_port=7860)
