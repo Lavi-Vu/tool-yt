@@ -30,15 +30,16 @@ def add_audio_and_subtitles_to_video(input_video_path, subtitle_file_path, audio
         os.remove(output_video_path)
 
     # Apply subtitles with black background
-    video_with_subtitles = input_video.filter('subtitles', subtitle_file_path, force_style='OutlineColour=&H00000000,BorderStyle=3,Outline=1,FontSize=22')
+    video_with_subtitles = input_video.filter('subtitles', subtitle_file_path, force_style='Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3,FontSize=22')
+    # video_with_subtitles = input_video.filter('subtitles', subtitle_file_path, force_style='Fontname=Consolas,BackColour=&H80000000,Spacing=0.2,Outline=0,Shadow=0.75')
 
     # Apply blur and black background to the subtitles
-    video_with_blur_background = video_with_subtitles.filter('drawtext',fontsize=3, fontcolor='white', text='', box=1, boxcolor='black@0.1',boxblur=50,boxborderw=5, x='(w-text_w)/2', y='h-30')
+    # video_with_blur_background = input_video.filter('drawtext',fontsize=25, fontcolor='white', text='aaaaaaaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbbbbb', box=1, boxcolor='black@0.6',boxborderw=5, x='(w-text_w)/2', y='h-100')
 
 
 
     # Trim the video to the end time of the subtitles
-    trimmed_video = ffmpeg.trim(video_with_blur_background, duration=subtitle_end_time_sec)
+    trimmed_video = ffmpeg.trim(video_with_subtitles, duration=subtitle_end_time_sec)
     trimmed_video = ffmpeg.setpts(trimmed_video, 'PTS-STARTPTS')
 
     # Combine video with new audio, trimming audio to match the video length
