@@ -11,7 +11,7 @@ import gradio as gr
 import re
 import docx
 from text import text_to_sequence, _clean_text
-import whisper
+from faster_whisper import WhisperModel
 import gc 
 import yt_dlp
 import webbrowser
@@ -213,15 +213,18 @@ def download_audio(url):
 # Function to transcribe audio using Whisper library
 def transcribe_audio_with_whisper(audio_path, model_type, language):
     try:
-        model = whisper.load_model(model_type)
+        model = WhisperModel(model_type, device="cuda", compute_type="int8_float16")
         if language == "auto":
-            result = model.transcribe(audio_path)
+            result = model.transcribe(audio_path, beam_size=5)
         else:
-            result = model.transcribe(audio_path, language=language)
+            text = str()
+            segments, _ = model.transcribe(audio_path, beam_size=5, language=language)
+            for segment in segments:
+                text += segment.text
         del model
         torch.cuda.empty_cache()
         gc.collect()
-        return result['text']
+        return text
     except Exception as e:
         print(f"Error transcribing audio with Whisper library: {e}")
         return None
@@ -274,13 +277,13 @@ def add_audio_and_subtitles_to_video(input_video_path, subtitle_file_path, audio
         os.remove(output_video_path)
 
     # Apply subtitles with black background
-    video_with_subtitles = input_video.filter('subtitles', subtitle_file_path, force_style='Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3,FontSize=22')
+    video_with_subtitles = input_video.filter('subtitles', subtitle_file_path, force_style='OutlineColour=&H00000000,BorderStyle=3,Outline=1,FontSize=22')
 
     # Apply blur and black background to the subtitles
-    # video_with_blur_background = video_with_subtitles.filter('drawtext',fontsize=3, fontcolor='white', text='', box=1, boxcolor='black@0.1', boxborderw=5, x='(w-text_w)/2', y='h-30')
+    video_with_blur_background = video_with_subtitles.filter('drawtext',fontsize=3, fontcolor='white', text='', box=1, boxcolor='black@0.1', boxborderw=5, x='(w-text_w)/2', y='h-30')
 
     # Trim the video to the end time of the subtitles
-    trimmed_video = ffmpeg.trim(video_with_subtitles, duration=subtitle_end_time_sec)
+    trimmed_video = ffmpeg.trim(video_with_blur_background, duration=subtitle_end_time_sec)
     trimmed_video = ffmpeg.setpts(trimmed_video, 'PTS-STARTPTS')
 
     # Combine video with new audio, trimming audio to match the video length

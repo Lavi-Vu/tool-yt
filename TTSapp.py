@@ -40,7 +40,7 @@ def add_audio_and_subtitles_to_video(input_video_path, subtitle_file_path, audio
 
     # Trim the video to the end time of the subtitles
     trimmed_video = ffmpeg.trim(video_with_subtitles, duration=subtitle_end_time_sec)
-    trimmed_video = ffmpeg.setpts(trimmed_video, 'PTS-STARTPTS')
+    # trimmed_video = ffmpeg.setpts(trimmed_video, 'PTS-STARTPTS')
 
     # Combine video with new audio, trimming audio to match the video length
     output = ffmpeg.output(trimmed_video, input_audio, output_video_path,

@@ -19,3 +19,4 @@ __pycache__
 .virtual_documents/*
 *.ass
 *.7z
+*.srt

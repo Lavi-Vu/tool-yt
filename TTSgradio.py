@@ -11,7 +11,7 @@ import gradio as gr
 import re
 import docx
 from text import text_to_sequence, _clean_text
-import whisper
+from faster_whisper import WhisperModel
 import gc 
 import yt_dlp
 import webbrowser
@@ -213,15 +213,18 @@ def download_audio(url):
 # Function to transcribe audio using Whisper library
 def transcribe_audio_with_whisper(audio_path, model_type, language):
     try:
-        model = whisper.load_model(model_type)
+        model = WhisperModel(model_type, device="cuda", compute_type="int8_float16")
         if language == "auto":
-            result = model.transcribe(audio_path)
+            result = model.transcribe(audio_path, beam_size=5)
         else:
-            result = model.transcribe(audio_path, language=language)
+            text = str()
+            segments, _ = model.transcribe(audio_path, beam_size=5, language=language)
+            for segment in segments:
+                text += segment.text
         del model
         torch.cuda.empty_cache()
         gc.collect()
-        return result['text']
+        return text
     except Exception as e:
         print(f"Error transcribing audio with Whisper library: {e}")
         return None
@@ -298,6 +301,7 @@ def process(video):
 
     # Add audio and subtitles to the video
     output_path = add_audio_and_subtitles_to_video(input_video_path, subtitle_file_path, audio_file_path, output_video_path)
+    os.remove(input_video_path)
     return output_path
 
 
