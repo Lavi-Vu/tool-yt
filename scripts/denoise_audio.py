@@ -1,8 +1,8 @@
 import os
 import json
 import torchaudio
-raw_audio_dir = "./raw_audio/"
-denoise_audio_dir = "./denoised_audio/"
+raw_audio_dir = "/home/lavi/Documents/myprj/QQ/data_VITS/VOICEACTOR/"
+denoise_audio_dir = "/home/lavi/Documents/myprj/QQ/data_VITS/denoise/VOICEACTOR/"
 filelist = list(os.walk(raw_audio_dir))[0][2]
 # 2023/4/21: Get the target sampling rate
 with open("./configs/finetune_speaker.json", 'r', encoding='utf-8') as f:
@@ -12,8 +12,9 @@ for file in filelist:
     if file.endswith(".wav"):
         os.system(f"demucs --two-stems=vocals {raw_audio_dir}{file}")
 for file in filelist:
+    print(file)
     file = file.replace(".wav", "")
-    wav, sr = torchaudio.load(f"./separated/htdemucs/{file}/vocals.wav", frame_offset=0, num_frames=-1, normalize=True,
+    wav, sr = torchaudio.load(f"{raw_audio_dir}/{file}", frame_offset=0, num_frames=-1, normalize=True,
                               channels_first=True)
     # merge two channels into one
     wav = wav.mean(dim=0).unsqueeze(0)

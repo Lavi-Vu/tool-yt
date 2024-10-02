@@ -316,7 +316,7 @@ if __name__ == "__main__":
     speaker_ids = hps.speakers
     tts_fn = create_tts_fn(args.model_dir, hps, speaker_ids)
 
-    with gr.Blocks() as demo:
+    with gr.Blocks(delete_cache=(3600, 3600)) as demo:
         with gr.Tab("Text-to-Speech"):
             with gr.Row():
                 with gr.Column():

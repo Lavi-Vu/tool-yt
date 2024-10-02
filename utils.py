@@ -12,6 +12,7 @@ import regex as re
 
 MATPLOTLIB_FLAG = False
 
+# Turn on log DEBUG here #
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging
 

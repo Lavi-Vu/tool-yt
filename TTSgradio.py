@@ -1,131 +1,41 @@
 import os
+import argparse
 import numpy as np
+import gradio as gr
+import utils
+from faster_whisper import WhisperModel
+from models import SynthesizerTrn
+import gc 
+from pydub import AudioSegment
+
 import torch
 from torch import no_grad, LongTensor
-import argparse
-import commons
-from mel_processing import spectrogram_torch
-import utils
-from models import SynthesizerTrn
-import gradio as gr
-import re
-import docx
-from text import text_to_sequence, _clean_text
-from faster_whisper import WhisperModel
-import gc 
-import yt_dlp
-import webbrowser
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-import logging
-import subprocess
-import pysrt
-import ffmpeg
-import soundfile as sf
-from datetime import timedelta
+import torchaudio
 
-logging.getLogger("PIL").setLevel(logging.WARNING)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("markdown_it").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("asyncio").setLevel(logging.WARNING)
+import webbrowser
+# import logging
+import soundfile as sf
+import librosa
+
+from _utils.text_process import *
+from _utils.youtube import *
+from _utils.video_process import *
+from _utils.audio_vc import load_models, crossfade
+
+
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+# logging.getLogger("PIL").setLevel(logging.WARNING)
+# logging.getLogger("urllib3").setLevel(logging.WARNING)
+# logging.getLogger("markdown_it").setLevel(logging.WARNING)
+# logging.getLogger("httpx").setLevel(logging.WARNING)
+# logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 language_marks = {
     "Japanese": "[JA]",
 }
 lang = ['Japanese']
-# lang = ['Korea']
-
-# def split_text_by_length_or_character(text):
-#     max_chunk_length = 40
-#     chunks = []
-#     start_idx = 0
-#     while start_idx < len(text):
-#         end_idx = min(start_idx + max_chunk_length, len(text))
-#         chunk = text[start_idx:end_idx]
-#         # Tìm vị trí của dấu chấm câu hoặc dấu xuống dòng
-#         # match = re.search(r'[。、.!?・・・\n]', chunk)
-#         # if match:
-#         #     end_idx = match.end()  # Lấy vị trí kết thúc của câu
-#         #     chunk = text[start_idx:start_idx + end_idx]
-#         chunks.append(chunk.strip())  # Thêm phần chunk vào danh sách chunks
-#         start_idx += len(chunk)
-#     return chunks
-def split_text_by_length_or_character(text):
-    lines = text.split('\n')
-    processed_lines = []
-    current_line = ""
-
-    for line in lines:
-        if current_line:
-            current_line += line
-        else:
-            current_line = line
-        
-        while len(current_line) >= 40:
-            processed_lines.append(current_line[:40])
-            current_line = current_line[40:]
-    
-    if current_line:  # Append any remaining text as the last line
-        processed_lines.append(current_line)
-
-    return processed_lines
 
 
-def get_text(text, hps, is_symbol):
-    text_norm = text_to_sequence(text, hps.symbols, [] if is_symbol else hps.data.text_cleaners)
-    if hps.data.add_blank:
-        text_norm = commons.intersperse(text_norm, 0)
-    text_norm = LongTensor(text_norm)
-    return text_norm
-
-def remove_empty_lines(text):
-    lines = text.splitlines()
-    cleaned_lines = [line for line in lines if line.strip()]
-    cleaned_text = '\n'.join(cleaned_lines)
-    return cleaned_text
-
-def read_txt_file(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
-        content = file.read()
-    return content
-
-def read_docx_file(file_path):
-    doc = docx.Document(file_path)
-    content = []
-    for paragraph in doc.paragraphs:
-        content.append(paragraph.text)
-    return '\n'.join(content)
-
-# Gradio Interface
-def file_or_text_reader(text, file):
-    if file:
-        # If the input is a file, determine its format and read its content
-        if file.name.endswith('.txt'):
-            content = read_txt_file(file.name)
-        elif file.name.endswith('.docx'):
-            content = read_docx_file(file.name)
-        else:
-            content = "Unsupported file format. Please upload a .txt or .docx file."
-    if text:
-        # If the input is text, return it directly
-        content = text
-    return content
-
-def format_srt_entry(index, start_time, end_time, text):
-    start = format_time(start_time)
-    end = format_time(end_time)
-    return f"{index}\n{start} --> {end}\n{text}\n"
-
-def format_time(seconds):
-    milliseconds = int((seconds % 1) * 1000)
-    seconds = int(seconds)
-    minutes, seconds = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    return f"{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}"
-
-def save_srt_file(filename, content):
-    with open(filename, 'w', encoding='utf-8') as f:
-        f.write("\n".join(content))
 def create_tts_fn(model_dir, hps, speaker_ids):
     def tts_fn(text, speaker, language, speed):
         with no_grad():
@@ -188,32 +98,154 @@ def create_tts_fn(model_dir, hps, speaker_ids):
         return "Success", (hps.data.sampling_rate, audio)
 
     return tts_fn
-# Function to download YouTube video
-def download_audio(url):
-    try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'outtmpl': 'downloaded_audio.%(ext)s',
-            'quiet': True
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(url, download=True)
-            audio_file = ydl.prepare_filename(info_dict).rsplit('.', 1)[0] + ".mp3"
-        return audio_file
-    except Exception as e:
-        print(f"Error downloading audio: {e}")
-        return None
 
+@torch.no_grad()
+@torch.inference_mode()
+def voice_conversion(source, target, diffusion_steps, length_adjust, inference_cfg_rate, n_quantizers):
+    model, to_mel, hift_gen, campplus_model, codec_encoder, sr, max_context_window, overlap_wave_len = load_models()
+    inference_module = model 
+    mel_fn = to_mel
+    bitrate = "320k"
+    overlap_frame_len = 64
+    # Load audio
+    source_audio = librosa.load(source, sr=sr)[0]
+    ref_audio = librosa.load(target, sr=sr)[0]
+
+    # Process audio
+    source_audio = torch.tensor(source_audio).unsqueeze(0).float().to(device)
+    ref_audio = torch.tensor(ref_audio[:sr * 25]).unsqueeze(0).float().to(device)
+
+    # Resample
+    ref_waves_16k = torchaudio.functional.resample(ref_audio, sr, 16000)
+
+    # Extract features
+    converted_waves_24k = torchaudio.functional.resample(source_audio, sr, 24000)
+    waves_input = converted_waves_24k.unsqueeze(1)
+    max_wave_len_per_chunk = 24000 * 20
+    wave_input_chunks = [
+        waves_input[..., i:i + max_wave_len_per_chunk] for i in range(0, waves_input.size(-1), max_wave_len_per_chunk)
+    ]
+    S_alt_chunks = []
+    for i, chunk in enumerate(wave_input_chunks):
+        z = codec_encoder.encoder(chunk)
+        (
+            quantized,
+            codes
+        ) = codec_encoder.quantizer(
+            z,
+            chunk,
+        )
+        S_alt = torch.cat([codes[1], codes[0]], dim=1)
+        S_alt_chunks.append(S_alt)
+    S_alt = torch.cat(S_alt_chunks, dim=-1)
+
+    # S_ori should be extracted in the same way
+    waves_24k = torchaudio.functional.resample(ref_audio, sr, 24000)
+    waves_input = waves_24k.unsqueeze(1)
+    z = codec_encoder.encoder(waves_input)
+    (
+        quantized,
+        codes
+    ) = codec_encoder.quantizer(
+        z,
+        waves_input,
+    )
+    S_ori = torch.cat([codes[1], codes[0]], dim=1)
+
+    mel = mel_fn(source_audio.to(device).float())
+    mel2 = mel_fn(ref_audio.to(device).float())
+
+    target_lengths = torch.LongTensor([int(mel.size(2) * length_adjust)]).to(mel.device)
+    target2_lengths = torch.LongTensor([mel2.size(2)]).to(mel2.device)
+
+    feat2 = torchaudio.compliance.kaldi.fbank(ref_waves_16k,
+                                              num_mel_bins=80,
+                                              dither=0,
+                                              sample_frequency=16000)
+    feat2 = feat2 - feat2.mean(dim=0, keepdim=True)
+    style2 = campplus_model(feat2.unsqueeze(0))
+
+    
+    F0_ori = None
+    F0_alt = None
+    shifted_f0_alt = None
+
+    # Length regulation
+    cond = inference_module.length_regulator(S_alt, ylens=target_lengths, n_quantizers=int(n_quantizers), f0=shifted_f0_alt)[0]
+    prompt_condition = inference_module.length_regulator(S_ori, ylens=target2_lengths, n_quantizers=int(n_quantizers), f0=F0_ori)[0]
+
+    max_source_window = max_context_window - mel2.size(2)
+    # split source condition (cond) into chunks
+    processed_frames = 0
+    generated_wave_chunks = []
+    # generate chunk by chunk and stream the output
+    while processed_frames < cond.size(1):
+        chunk_cond = cond[:, processed_frames:processed_frames + max_source_window]
+        is_last_chunk = processed_frames + max_source_window >= cond.size(1)
+        cat_condition = torch.cat([prompt_condition, chunk_cond], dim=1)
+        # Voice Conversion
+        vc_target = inference_module.cfm.inference(cat_condition,
+                                                   torch.LongTensor([cat_condition.size(1)]).to(mel2.device),
+                                                   mel2, style2, None, diffusion_steps,
+                                                   inference_cfg_rate=inference_cfg_rate)
+        vc_target = vc_target[:, :, mel2.size(-1):]
+        
+        vc_wave = hift_gen.inference(vc_target, f0=None)
+        
+        if processed_frames == 0:
+            if is_last_chunk:
+                output_wave = vc_wave[0].cpu().numpy()
+                generated_wave_chunks.append(output_wave)
+                output_wave = (output_wave * 32768.0).astype(np.int16)
+                mp3_bytes = AudioSegment(
+                    output_wave.tobytes(), frame_rate=sr,
+                    sample_width=output_wave.dtype.itemsize, channels=1
+                ).export(format="mp3", bitrate=bitrate).read()
+                yield mp3_bytes, (sr, np.concatenate(generated_wave_chunks))
+                break
+            output_wave = vc_wave[0, :-overlap_wave_len].cpu().numpy()
+            generated_wave_chunks.append(output_wave)
+            previous_chunk = vc_wave[0, -overlap_wave_len:]
+            processed_frames += vc_target.size(2) - overlap_frame_len
+            output_wave = (output_wave * 32768.0).astype(np.int16)
+            mp3_bytes = AudioSegment(
+                output_wave.tobytes(), frame_rate=sr,
+                sample_width=output_wave.dtype.itemsize, channels=1
+            ).export(format="mp3", bitrate=bitrate).read()
+            yield mp3_bytes, None
+        elif is_last_chunk:
+            output_wave = crossfade(previous_chunk.cpu().numpy(), vc_wave[0].cpu().numpy(), overlap_wave_len)
+            generated_wave_chunks.append(output_wave)
+            processed_frames += vc_target.size(2) - overlap_frame_len
+            output_wave = (output_wave * 32768.0).astype(np.int16)
+            mp3_bytes = AudioSegment(
+                output_wave.tobytes(), frame_rate=sr,
+                sample_width=output_wave.dtype.itemsize, channels=1
+            ).export(format="mp3", bitrate=bitrate).read()
+            yield mp3_bytes, (sr, np.concatenate(generated_wave_chunks))
+            break
+        else:
+            output_wave = crossfade(previous_chunk.cpu().numpy(), vc_wave[0, :-overlap_wave_len].cpu().numpy(), overlap_wave_len)
+            generated_wave_chunks.append(output_wave)
+            previous_chunk = vc_wave[0, -overlap_wave_len:]
+            processed_frames += vc_target.size(2) - overlap_frame_len
+            output_wave = (output_wave * 32768.0).astype(np.int16)
+            mp3_bytes = AudioSegment(
+                output_wave.tobytes(), frame_rate=sr,
+                sample_width=output_wave.dtype.itemsize, channels=1
+            ).export(format="mp3", bitrate=bitrate).read()
+            yield mp3_bytes, None
+            
+    
+    del model, hift_gen, campplus_model, codec_encoder
+    gc.collect()
+    torch.cuda.empty_cache()
+    
+    
 # Function to transcribe audio using Whisper library
 def transcribe_audio_with_whisper(audio_path, model_type, language):
     try:
-        model = WhisperModel(model_type, device="cuda", compute_type="int8_float16")
+        model = WhisperModel(model_type, device="cuda", compute_type="int8")
         if language == "auto":
             result = model.transcribe(audio_path, beam_size=5)
         else:
@@ -228,6 +260,7 @@ def transcribe_audio_with_whisper(audio_path, model_type, language):
     except Exception as e:
         print(f"Error transcribing audio with Whisper library: {e}")
         return None
+
 def add_punctuation(text):
     punctuated_text = ""
     count = 0
@@ -255,54 +288,6 @@ def transcribe_audio(youtube_url, model_type, language):
     else:
         return "Audio download failed"
 
-def add_audio_and_subtitles_to_video(input_video_path, subtitle_file_path, audio_file_path, output_video_path):
-    subs = pysrt.open(subtitle_file_path)
-    last_sub_end_time = subs[-1].end.to_time() if subs else timedelta(seconds=0)
-
-    # Convert last_sub_end_time to timedelta for total_seconds calculation
-    last_sub_end_time = timedelta(hours=last_sub_end_time.hour,
-                                  minutes=last_sub_end_time.minute,
-                                  seconds=last_sub_end_time.second,
-                                  microseconds=last_sub_end_time.microsecond)
-
-    # Calculate the total duration needed in seconds
-    subtitle_end_time_sec = last_sub_end_time.total_seconds()
-
-    # Construct the ffmpeg command
-    input_video = ffmpeg.input(input_video_path, stream_loop=-1)
-    input_audio = ffmpeg.input(audio_file_path)
-
-    if os.path.exists(output_video_path):
-        os.remove(output_video_path)
-
-    # Apply subtitles with black background
-    video_with_subtitles = input_video.filter('subtitles', subtitle_file_path, force_style='Fontname=Roboto,OutlineColour=&H40000000,BorderStyle=3,FontSize=22')
-
-    # Apply blur and black background to the subtitles
-    # video_with_blur_background = video_with_subtitles.filter('drawtext',fontsize=3, fontcolor='white', text='', box=1, boxcolor='black@0.1', boxborderw=5, x='(w-text_w)/2', y='h-30')
-
-    # Trim the video to the end time of the subtitles
-    trimmed_video = ffmpeg.trim(video_with_subtitles, duration=subtitle_end_time_sec)
-    trimmed_video = ffmpeg.setpts(trimmed_video, 'PTS-STARTPTS')
-
-    # Combine video with new audio, trimming audio to match the video length
-    output = ffmpeg.output(trimmed_video, input_audio, output_video_path,
-                           vcodec='h264_nvenc', acodec='aac',
-                           video_bitrate='5M', strict='experimental')
-
-    ffmpeg.run(output)
-    return output_video_path
-
-def process(video):
-    input_video_path = video.name
-    subtitle_file_path = 'create_video_demo/output.srt'
-    audio_file_path = 'create_video_demo/audio.wav'
-    output_video_path = "create_video_demo/output_gradio_for_demo.mp4"
-
-    # Add audio and subtitles to the video
-    output_path = add_audio_and_subtitles_to_video(input_video_path, subtitle_file_path, audio_file_path, output_video_path)
-    os.remove(input_video_path)
-    return output_path
 
 
 if __name__ == "__main__":
@@ -316,7 +301,7 @@ if __name__ == "__main__":
     speaker_ids = hps.speakers
     tts_fn = create_tts_fn(args.model_dir, hps, speaker_ids)
 
-    with gr.Blocks() as demo:
+    with gr.Blocks(delete_cache=(3600, 3600)) as demo:
         with gr.Tab("Text-to-Speech"):
             with gr.Row():
                 with gr.Column():
@@ -358,25 +343,23 @@ if __name__ == "__main__":
                 title="Add Audio and Subtitles with GPU Acceleration",
                 description="Upload a video, an .srt file, and an audio file to add subtitles and replace the audio using GPU acceleration."
             )
-        # with gr.Tab("TOOL AIO"):        
-        #     with gr.Row():
-        #         with gr.Column():
-        #             video_input = gr.File(label="Upload Video", file_types=["video"])
-        #             text_input = gr.Textbox(label="Enter Youtube link")
-        #             model_options= gr.Dropdown(choices=["base", "medium"], label='model')
-        #             char_dropdown = gr.Dropdown(choices=speaker_ids.keys(), label='character')
-        #             language_dropdown = gr.Dropdown(choices=lang, label='language')
-        #             duration_slider = gr.Slider(minimum=0.1, maximum=5, value=1, step=0.1, label='Speed')
-        #         with gr.Column():
-        #             video_output = gr.Video(label="Preview Video")
-        #             transcript_output = gr.Textbox(label="Transcript")
-        #             audio_output = gr.Audio(label="Output Audio", elem_id="tts-audio")
+            
+        with gr.Tab("TOOL CHUYEN GIONG"):
+            inputs = [
+                gr.Audio(type="filepath", label="Source Audio"),
+                gr.Audio(type="filepath", label="Reference Audio"),
+                gr.Slider(minimum=1, maximum=200, value=10, step=1, label="Diffusion Steps", info="10 by default, 50~100 for best quality"),
+                gr.Slider(minimum=0.5, maximum=2.0, step=0.1, value=1.0, label="Length Adjust", info="<1.0 for speed-up speech, >1.0 for slow-down speech"),
+                gr.Slider(minimum=0.0, maximum=1.0, step=0.1, value=0.7, label="Inference CFG Rate", info="has subtle influence"),
+                gr.Slider(minimum=1, maximum=3, step=1, value=1, label="N Quantizers", info="the less quantizer used, the less prosody of source audio is preserved"),
+            ]
 
-        #     submit_button = gr.Button("Submit")
-        #     submit_button.click(
-        #         process_video, 
-        #         inputs=[video_input, text_input, model_options, char_dropdown, language_dropdown, duration_slider], 
-        #         outputs=[video_output, transcript_output, audio_output]
-        #     )   
+            outputs = [gr.Audio(label="Stream Output Audio / 流式输出", streaming=True, format='mp3'),
+               gr.Audio(label="Full Output Audio / 完整输出", streaming=False, format='wav')]
+            gr.Interface(fn=voice_conversion,
+                 inputs=inputs,
+                 outputs=outputs,
+                 title="Voice Conversion",
+                 )
     webbrowser.open("http://127.0.0.1:7861")
     demo.launch(server_port=7861)

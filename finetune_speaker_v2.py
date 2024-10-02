@@ -17,7 +17,7 @@ from tqdm import tqdm
 import librosa
 import logging
 
-logging.getLogger('numba').setLevel(logging.WARNING)
+# logging.getLogger('numba').setLevel(logging.WARNING)
 
 import commons
 import utils
