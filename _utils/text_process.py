@@ -5,9 +5,9 @@ import docx
 import re
 
 def split_text_by_length_or_character(text):
-    # lines = text.split('\n')
-    # processed_lines = []
-    # current_line = ""
+    lines = text.split('\n')
+    processed_lines = []
+    current_line = ""
 
     # for line in lines:
     #     if current_line:
@@ -18,15 +18,15 @@ def split_text_by_length_or_character(text):
     #     while len(current_line) >= 40:
     #         processed_lines.append(current_line[:40])
     #         current_line = current_line[40:]
+    # return processed_lines
     
-    # if current_line:  # Append any remaining text as the last line
-    #     processed_lines.append(current_line)
-    pattern = r'(?<=[。！？])|\n'
+    if current_line:  # Append any remaining text as the last line
+        processed_lines.append(current_line)
+    pattern = r'(?<=[。！？ 、])|\n'
 
     sentences = re.split(pattern, text)
-    sentences = [sentence for sentence in sentences if sentence]
+    sentences = [sentence for sentence in sentences if sentence ]
     return sentences
-    # return processed_lines
 
 
 def get_text(text, hps, is_symbol):

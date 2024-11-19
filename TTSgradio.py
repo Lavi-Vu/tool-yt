@@ -1,5 +1,6 @@
 import os
 import argparse
+from typing import Any
 import numpy as np
 import gradio as gr
 import utils
@@ -21,7 +22,8 @@ from _utils.text_process import *
 from _utils.youtube import *
 from _utils.video_process import *
 from _utils.audio_vc import load_models, crossfade
-
+import edge_tts
+import platform
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 # logging.getLogger("PIL").setLevel(logging.WARNING)
@@ -33,11 +35,48 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 language_marks = {
     "Japanese": "[JA]",
 }
-lang = ['Japanese']
+lang = ['Japanese', 'English']
 
+async def amain(text, voice) -> None:
+    """Main function"""
+    OUTPUT_FILE = "./create_video_demo/audio.wav"
+    WEBVTT_FILE = "./create_video_demo/output.srt"
+    
+    communicate = edge_tts.Communicate(text, voice)
+    submaker = edge_tts.SubMaker()
+    with open(OUTPUT_FILE, "wb") as file:
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                file.write(chunk["data"])
+            elif chunk["type"] == "WordBoundary":
+                submaker.create_sub((chunk["offset"], chunk["duration"]), chunk["text"])
 
-def create_tts_fn(model_dir, hps, speaker_ids):
-    def tts_fn(text, speaker, language, speed):
+    with open(WEBVTT_FILE, "w", encoding="utf-8") as file:
+        file.write(submaker.generate_subs())
+        
+    # Modify subtitle for Windows 
+    if(platform.system() == 'Windows'):
+        with open(WEBVTT_FILE, "w", encoding="utf-8") as file:
+            file.write(submaker.generate_subs())
+        with open(WEBVTT_FILE, "r", encoding="utf-8") as file:
+            lines = file.readlines()
+        with open(WEBVTT_FILE, "w", encoding="utf-8") as file:
+            for line in lines:
+                if "-->" in line:
+                    file.write(line.strip() + " ")
+                else:
+                    file.write(line)
+
+def tts_fn(model_name, text, speaker, language, speed):
+    config_dir = model_list[model_name] + 'config.json'
+    model_dir = model_list[model_name] + 'G_latest.pth'
+    try:
+        hps = utils.get_hparams_from_file(config_dir) 
+        speaker_ids = hps.speakers
+        print(config_dir)
+    except Exception as e :
+        return f"Error: {str(e)}"
+    if (model_name != 'TTS'):
         with no_grad():
             model = SynthesizerTrn(
                 len(hps.symbols),
@@ -74,7 +113,7 @@ def create_tts_fn(model_dir, hps, speaker_ids):
                     sid = LongTensor([speaker_id]).to(device)
                     
                     audio_from_text = model.infer(x_tst, x_tst_lengths, sid=sid, noise_scale=.667, noise_scale_w=0.8,
-                                                  length_scale=0.8 / speed)[0][0, 0].data.cpu().float().numpy()
+                                                    length_scale=1 / speed)[0][0, 0].data.cpu().float().numpy()
                     
                     start_time = current_time
                     duration = len(audio_from_text) / hps.data.sampling_rate
@@ -96,8 +135,15 @@ def create_tts_fn(model_dir, hps, speaker_ids):
             sf.write('create_video_demo/audio.wav', audio, hps.data.sampling_rate)
         save_srt_file("create_video_demo/output.srt", srt_content)
         return "Success", (hps.data.sampling_rate, audio)
+    
+    elif(model_name == 'TTS'):
+        import asyncio
+        TEXT = text
+        VOICE = speaker
+        asyncio.run(amain(TEXT, speaker))
+        audio,  samplerate = sf.read('./create_video_demo/audio.wav')
+        return "Success", (samplerate, audio)
 
-    return tts_fn
 
 @torch.no_grad()
 @torch.inference_mode()
@@ -279,44 +325,69 @@ def add_punctuation(text):
 def transcribe_audio(youtube_url, model_type, language):
     audio_path = download_audio(youtube_url)
     if audio_path:
-        transcription = transcribe_audio_with_whisper(audio_path, model_type, language)
-        os.remove(audio_path)  # Remove the audio file after transcription
-        if transcription:
-            return add_punctuation(transcription)
-        else:
-            return "Transcription failed"
+        if model_type != 'turbo':
+            transcription = transcribe_audio_with_whisper(audio_path, model_type, language)
+            os.remove(audio_path)  # Remove the audio file after transcription
+            if transcription:
+                return add_punctuation(transcription)
+            else:
+                return "Transcription failed"
+        elif model_type == 'turbo':
+            import whisper
+
+            model = whisper.load_model("turbo")
+            transcription = model.transcribe(audio_path)
+            print(transcription["text"])
+            del model
+            torch.cuda.empty_cache()
+            gc.collect()
+            if transcription and language != 'en':
+                return add_punctuation(transcription["text"])
+            elif transcription and language == 'en':
+                return transcription["text"]
+            else:
+                return "Transcription failed"
     else:
         return "Audio download failed"
 
+def get_model_params(model_name):
+    config_dir = model_list[model_name] + 'config.json'
+    model_dir = model_list[model_name] + 'G_latest.pth'
+    print(config_dir)
+    try:
+        hps = utils.get_hparams_from_file(config_dir) 
+        speaker_ids = hps.speakers
+        print(hps)
+        print(config_dir)
+        print(speaker_ids)
+        return gr.update(choices=list(speaker_ids.keys()), value=None)
+
+    except Exception as e :
+        return gr.update(choices=[], value=None)
 
 
+model_list = {'VBEE': './MODEL_VBEE/',
+        'OPENAI' : './MODEL_OPENAI/',
+        'TTS' : './TTS/',
+        }
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model_dir", default="./G_latest.pth", help="directory to your fine-tuned model")
-    parser.add_argument("--config_dir", default="./finetune_speaker.json", help="directory to your model config file")
-
-    args = parser.parse_args()
-    hps = utils.get_hparams_from_file(args.config_dir)
-
-    speaker_ids = hps.speakers
-    tts_fn = create_tts_fn(args.model_dir, hps, speaker_ids)
-
     with gr.Blocks(delete_cache=(3600, 3600)) as demo:
         with gr.Tab("Text-to-Speech"):
             with gr.Row():
                 with gr.Column():
                     textbox = gr.TextArea(label="Text",
-                                          placeholder="Type your sentence here",
-                                          value="こんにちわ。", elem_id="tts-input")
-                    char_dropdown = gr.Dropdown(choices=speaker_ids.keys(), value=list(speaker_ids.keys())[0], label='character')
-                    # char_dropdown = gr.Dropdown(choices=speaker_ids, value=speaker_ids[0], label='character')
+                                          placeholder="Type your sentence here",elem_id="tts-input")
+                    model_name = gr.Dropdown(choices=list(model_list.keys()),label="Select Model", interactive=True, value=None)
+                    char_dropdown = gr.Dropdown(choices=[], label='character', interactive=True)
                     language_dropdown = gr.Dropdown(choices=lang, value=lang[0], label='language')
-                    duration_slider = gr.Slider(minimum=0.1, maximum=5, value=1, step=0.1, label='Speed')
+                    duration_slider = gr.Slider(minimum=0.1, maximum=3, value=1, step=0.1, label='Speed')
+                    
+                    model_name.change(fn=get_model_params, inputs=model_name, outputs=[char_dropdown])
                 with gr.Column():
                     text_output = gr.Textbox(label="Message")
                     audio_output = gr.Audio(label="Output Audio", elem_id="tts-audio")
                     btn = gr.Button("Generate!")
-                    btn.click(tts_fn, inputs=[textbox, char_dropdown, language_dropdown, duration_slider], outputs=[text_output, audio_output])
+                    btn.click(tts_fn, inputs=[model_name,textbox, char_dropdown, language_dropdown, duration_slider], outputs=[text_output, audio_output])
         with gr.Tab("TOOL lay SUB"):
             gr.Markdown("# YouTube Video Transcriber")
             gr.Markdown("Enter the URL of a YouTube video to download, extract audio, and transcribe using Whisper.")
@@ -324,8 +395,8 @@ if __name__ == "__main__":
             with gr.Row():
                 with gr.Column():
                     url_input = gr.Textbox(label="YouTube Video URL", placeholder="Enter YouTube video URL here...")
-                    model_select = gr.Dropdown(label="Select Model Type", choices=["base", "medium"], value="base")
-                    language_select = gr.Dropdown(label="Select Language", choices=["ko","ja","auto"], value="ja")
+                    model_select = gr.Dropdown(label="Select Model Type", choices=["base", "medium", "turbo"], value="turbo")
+                    language_select = gr.Dropdown(label="Select Language", choices=["ko","ja","en","auto"], value="ja")
                     transcribe_button = gr.Button("Transcribe")
                 with gr.Column():
                     transcription_output = gr.Textbox(label="Transcription")

@@ -1,0 +1,10 @@
+{
+    "speakers": {
+    "ja-JP-KeitaNeural": "ja-JP-KeitaNeural",
+    "ja-JP-NanamiNeural": "ja-JP-NanamiNeural",
+    "en-US-AndrewNeural" : "en-US-AndrewNeural",
+    "en-US-ChristopherNeural" : "en-US-ChristopherNeural",
+    "en-US-EmmaNeural" : "en-US-EmmaNeural",
+    "en-US-JennyNeural" : "en-US-JennyNeural"
+    }
+}

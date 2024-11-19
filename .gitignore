@@ -9,7 +9,8 @@ OUTPUT_MODEL/G_latest.pth
 .virtual_documents
 .ipynb_checkpoints
 __pycache__
-__pycache__/*
+__pycache__/
+__pycache_
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -22,5 +23,9 @@ __pycache__/*
 *.7z
 *.srt
 *.pt
+*.vtt
 checkpoints
 checkpoints/*
+create_video_demo/
+MODEL_OPENAI/
+MODEL_VBEE/

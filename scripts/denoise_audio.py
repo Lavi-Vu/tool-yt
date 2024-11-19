@@ -1,8 +1,8 @@
 import os
 import json
 import torchaudio
-raw_audio_dir = "/home/lavi/Documents/myprj/QQ/data_VITS/VOICEACTOR/"
-denoise_audio_dir = "/home/lavi/Documents/myprj/QQ/data_VITS/denoise/VOICEACTOR/"
+raw_audio_dir = "/home/lavi/Downloads/data/vbee/data_croped/shiori/"
+denoise_audio_dir = "/home/lavi/Downloads/data/vbee/denoise/shiori/"
 filelist = list(os.walk(raw_audio_dir))[0][2]
 # 2023/4/21: Get the target sampling rate
 with open("./configs/finetune_speaker.json", 'r', encoding='utf-8') as f:
