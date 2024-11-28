@@ -3,6 +3,7 @@ import commons
 from torch import no_grad, LongTensor
 import docx
 import re
+import pysrt
 
 def split_text_by_length_or_character(text):
     lines = text.split('\n')
@@ -84,3 +85,25 @@ def format_time(seconds):
 def save_srt_file(filename, content):
     with open(filename, 'w', encoding='utf-8') as f:
         f.write("\n".join(content))
+        
+def add_punctuation(text):
+    punctuated_text = ""
+    count = 0
+    for char in text:
+        count += 1
+        punctuated_text += char
+        if char == '。' or count % 40 ==0:  # Sentence-ending period in Japanese (full stop)
+            punctuated_text += '\n'
+            count = 0
+    
+    punctuated_text = punctuated_text.strip()
+    if not punctuated_text.endswith('\n'):
+        punctuated_text += '\n'
+    return punctuated_text
+
+
+def sub_reformat(subtitle_file_path):
+    subs = pysrt.open(subtitle_file_path)
+    for i in subs:
+        count = 0 
+        
